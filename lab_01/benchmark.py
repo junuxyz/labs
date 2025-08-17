@@ -1,8 +1,10 @@
 import torch
 from add_triton import triton_add
 
-def benchmark_pytorch(a,b):
+
+def benchmark_pytorch(a, b):
     return a + b
+
 
 def run_benchmark(fn, *args):
     start_event = torch.cuda.Event(enable_timing=True)
@@ -19,7 +21,8 @@ def run_benchmark(fn, *args):
     elapsed_time_ms = start_event.elapsed_time(end_event)
     return elapsed_time_ms / 100
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
 size = 1024 * 1024
 a = torch.randn(size, device=device)
 b = torch.randn(size, device=device)
