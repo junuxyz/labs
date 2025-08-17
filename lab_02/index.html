@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>chat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: monospace;
+            background: #000;
+            color: #fff;
+            height: 100vh;
+            overflow: hidden;
+            padding: 10px;
+        }
+        #terminal {
+            height: 100vh;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .msg { margin-bottom: 5px; }
+        .user { color: #fff; }
+        .user:before { content: "> "; }
+        .bot { color: #03ff03; }
+        .bot:before { content: "< "; }
+        .loading { color: #666; }
+        .current-line {
+            color: #fff;
+            display: inline;
+        }
+        .cursor {
+            background: #fff;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="terminal">
+        <div class="msg">
+            <span class="current-line">> <span id="current-input"></span><span class="cursor">█</span></span>
+        </div>
+    </div>
+
+    <script>
+        let currentInput = '';
+
+        function add(text, user = false) {
+            /**
+             * Adds a message to the terminal display.
+             * Removes the current input line, appends the message, and creates a new input line.
+             *
+             * @param {string} text - The message to display.
+             * @param {boolean} [user=false] - If true, styles the message as a user message; otherwise, as a bot message.
+             */
+
+            const terminal = document.getElementById('terminal');
+            const div = document.createElement('div');
+            div.className = `msg ${user ? 'user' : 'bot'}`;
+            div.textContent = text;
+
+            // remove the current input line and append message
+            const currentLine = terminal.querySelector('.current-line').parentElement;
+            currentLine.remove();
+            terminal.appendChild(div);
+
+            const newLine = document.createElement('div');
+            newLine.className = 'msg';
+            newLine.innerHTML = '<span class="current-line">> <span id="current-input"> \
+                                 </span><span class="cursor">█</span></span>';
+            terminal.appendChild(newLine);
+
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function loading(show) {
+            /**
+             * Shows a loading UI if parameter show is true.
+             *
+             * @param {boolean} show - If true, shows a loading UI.
+             */
+            const terminal = document.getElementById('terminal');
+            const el = document.getElementById('load');
+
+            if (show) {
+                const currentLine = terminal.querySelector('.current-line').parentElement;
+                currentLine.remove();
+
+                const div = document.createElement('div');
+                div.id = 'load';
+                div.className = 'loading';
+                div.textContent = '...';
+                terminal.appendChild(div);
+                terminal.scrollTop = terminal.scrollHeight;
+            } else if (el) {
+                el.remove();
+
+                const newLine = document.createElement('div');
+                newLine.className = 'msg';
+                newLine.innerHTML = '<span class="current-line">> <span id="current-input"> \
+                                     </span><span class="cursor">█</span></span>';
+
+                // create newLine again
+                terminal.appendChild(newLine);
+                terminal.scrollTop = terminal.scrollHeight;
+            }
+        }
+
+        async function send() {
+            /**
+             * Sends the message input to the server
+             */
+            const msg = currentInput.trim();
+
+            if (!msg) return;
+            if (msg == "clear()" || msg == "clear") {
+                // Clear all the content in terminal and start fresh
+                const terminal = document.getElementById('terminal');
+                terminal.innerHTML = `
+                    <div class="msg">
+                        <span class="current-line">> <span id="current-input"></span> \
+                        <span class="cursor">█</span></span>
+                    </div>
+                `;
+                currentInput = '';
+                return;
+            }
+
+            add(msg, true);
+            currentInput = '';
+            document.getElementById('current-input').textContent = '';
+            loading(true);
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg, max_length: 100 })
+                });
+                const data = await res.json();
+                loading(false);
+                add(res.ok ? data.response : 'error');
+            } catch {
+                loading(false);
+                add('failed');
+            }
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                send();
+            } else if (e.key === 'Backspace') {
+                e.preventDefault();
+                currentInput = currentInput.slice(0, -1);
+                document.getElementById('current-input').textContent = currentInput;
+            } else if (e.key.length === 1) {
+                e.preventDefault();
+                currentInput += e.key;
+                document.getElementById('current-input').textContent = currentInput;
+            }
+        });
+
+        document.addEventListener('click', function() {
+            document.body.focus();
+        });
+        document.body.focus();
+    </script>
+</body>
+</html>

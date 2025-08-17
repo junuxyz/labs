@@ -1,0 +1,10 @@
+# base: nginx
+# alpine is Alpine Linux, a lightweight Linux distrbution
+FROM nginx:alpine
+
+# Copies local index.html file into the default directory
+# Nginx serves static files from inside the container.
+COPY index.html /usr/share/nginx/html/
+# Copies custom Nginx configuration file into the container
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
