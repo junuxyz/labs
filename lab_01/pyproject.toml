@@ -1,0 +1,18 @@
+[project]
+name = "lab-01"
+version = "0.1.0"
+description = "dependencies for Lab01"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "matplotlib>=3.9.4",
+    "numpy>=2.0.2",
+    "pandas>=2.3.1",
+    "seaborn>=0.13.2",
+    "torch>=2.7.1",
+]
+
+[tool.uv.workspace]
+members = [
+    "lab_01",
+]
