@@ -16,6 +16,7 @@ A simple chatbot containerized in Docker and ran on FastAPI.
 ```
 
 Note: It takes a while to build ... (backend is ~7GB)
+
 Note 2: It takes some time (~3min) for backend to start run after it is deployed. Check the log
 
 ```bash
@@ -26,7 +27,6 @@ chat-backend   | 2025-08-17T07:33:55.716661395Z INFO:     Uvicorn running on htt
 ```
 
 needs to show up!
-
 
 <br>
 
@@ -45,13 +45,24 @@ After the build is finished, visit Frontend and Backend via:
 # check all logs
 docker-compose logs -f --timestamps
 
-# to only check backend logs
-docker logs chat-backend -f
-# or
-docker-compose logs backend -f
-
 # to only check frontend logs
 docker logs chat-frontend -f
 # or
 docker-compose logs frontend -f
+
+# to only check backend logs
+docker logs chat-backend -f
+# or
+docker-compose logs backend -f
+```
+
+
+## How to Restart Backend or Frontend
+
+```bash
+# frontend:
+docker-compose restart frontend
+
+# backend:
+docker-compose restart backend
 ```

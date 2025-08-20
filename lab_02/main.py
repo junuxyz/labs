@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from model import generate_response
 from pydantic import BaseModel
 
-app = FastAPI(title="Lab02: DialoGPT API", version="1.0.0")
+app = FastAPI(title="simple chat")
 
 # Add CORS Middleware
 app.add_middleware(
@@ -27,7 +27,7 @@ class ChatResponse(BaseModel):
 
 @app.get("/")
 async def root():
-    return {"message": "DialoGPT API is running."}
+    return {"message": "simple chat is running."}
 
 
 @app.post("/chat", response_model=ChatResponse)
