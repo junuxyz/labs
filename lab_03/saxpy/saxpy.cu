@@ -56,8 +56,9 @@ void saxpyCuda(int N, float alpha, float* xarray, float* yarray, float* resultar
     const int blocks = (N + threadsPerBlock - 1) / threadsPerBlock;
 
     // These are pointers that will be pointers to memory allocated
-    // *one the GPU*.  You should allocate these pointers via
-    // cudaMalloc.  You can access the resulting buffers from CUDA
+    // *on the GPU*.  You should allocate these pointers via
+    // cudaMalloc.
+    // You can access the resulting buffers from CUDA
     // device kernel code (see the kernel function saxpy_kernel()
     // above) but you cannot access the contents these buffers from
     // this thread. CPU threads cannot issue loads and stores from GPU
@@ -75,6 +76,9 @@ void saxpyCuda(int N, float alpha, float* xarray, float* yarray, float* resultar
     //
     // https://devblogs.nvidia.com/easy-introduction-cuda-c-and-c/
     //
+    cudaMalloc(&device_x, N * sizeof(float));
+    cudaMalloc(&device_y, N * sizeof(float));
+    cudaMalloc(&device_result, N * sizeof(float));
 
     // start timing after allocation of device memory
     double startTime = CycleTimer::currentSeconds();
@@ -82,7 +86,9 @@ void saxpyCuda(int N, float alpha, float* xarray, float* yarray, float* resultar
     //
     // CS149 TODO: copy input arrays to the GPU using cudaMemcpy
     //
-
+    size_t bytes = N * sizeof(float);
+    cudaMemcpy(device_x, xarray, bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(device_y, yarray, bytes, cudaMemcpyHostToDevice);
 
     // run CUDA kernel. (notice the <<< >>> brackets indicating a CUDA
     // kernel launch) Execution on the GPU occurs here.
@@ -91,7 +97,7 @@ void saxpyCuda(int N, float alpha, float* xarray, float* yarray, float* resultar
     //
     // CS149 TODO: copy result from GPU back to CPU using cudaMemcpy
     //
-
+    cudaMemcpy(resultarray, device_result, bytes, cudaMemcpyDeviceToHost);
 
     // end timing after result has been copied back into host memory
     double endTime = CycleTimer::currentSeconds();
@@ -108,7 +114,9 @@ void saxpyCuda(int N, float alpha, float* xarray, float* yarray, float* resultar
     //
     // CS149 TODO: free memory buffers on the GPU using cudaFree
     //
-
+    cudaFree(device_x);
+    cudaFree(device_y);
+    cudaFree(device_result);
 }
 
 void printCudaInfo() {
