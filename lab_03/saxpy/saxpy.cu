@@ -24,7 +24,6 @@ saxpy_kernel(int N, float alpha, float* x, float* y, float* result) {
     // blockDim and threadIdx.
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
-
     // this check is necessary to make the code work for values of N
     // that are not a multiple of the thread block size (blockDim.x)
     if (index < N)
@@ -44,15 +43,16 @@ void saxpyCuda(int N, float alpha, float* xarray, float* yarray, float* resultar
     // output array (resultarray)
     int totalBytes = sizeof(float) * 3 * N;
 
-    // compute number of blocks and threads per block.  In this
-    // application we've hardcoded thread blocks to contain 512 CUDA
-    // threads.
+    // compute number of blocks and threads per block.
+    // In this application we've hardcoded thread blocks
+    // to contain 512 CUDA threads.
     const int threadsPerBlock = 512;
 
     // Notice the round up here.  The code needs to compute the number
     // of threads blocks needed such that there is one thread per
     // element of the arrays.  This code is written to work for values
     // of N that are not multiples of threadPerBlock.
+    // so for the last block, it may not be full.
     const int blocks = (N + threadsPerBlock - 1) / threadsPerBlock;
 
     // These are pointers that will be pointers to memory allocated
@@ -86,14 +86,16 @@ void saxpyCuda(int N, float alpha, float* xarray, float* yarray, float* resultar
     //
     // CS149 TODO: copy input arrays to the GPU using cudaMemcpy
     //
-    size_t bytes = N * sizeof(float);
+    int bytes = N * sizeof(float);
     cudaMemcpy(device_x, xarray, bytes, cudaMemcpyHostToDevice);
     cudaMemcpy(device_y, yarray, bytes, cudaMemcpyHostToDevice);
 
+    double kernelStartTime = CycleTimer::currentSeconds();
     // run CUDA kernel. (notice the <<< >>> brackets indicating a CUDA
     // kernel launch) Execution on the GPU occurs here.
     saxpy_kernel<<<blocks, threadsPerBlock>>>(N, alpha, device_x, device_y, device_result);
-
+    cudaDeviceSynchronize();
+    double kernelEndTime = CycleTimer::currentSeconds();
     //
     // CS149 TODO: copy result from GPU back to CPU using cudaMemcpy
     //
@@ -109,7 +111,9 @@ void saxpyCuda(int N, float alpha, float* xarray, float* yarray, float* resultar
     }
 
     double overallDuration = endTime - startTime;
+    double kernelDuration = kernelEndTime - kernelStartTime;
     printf("Effective BW by CUDA saxpy: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * overallDuration, GBPerSec(totalBytes, overallDuration));
+    printf("Effective BW by CUDA saxpy kernel: %.3f ms\t\t[%.3f GB/s]\n", 1000.f * kernelDuration, GBPerSec(totalBytes, kernelDuration));
 
     //
     // CS149 TODO: free memory buffers on the GPU using cudaFree
