@@ -12,6 +12,7 @@
 
 #include "CycleTimer.h"
 
+// blockDim
 #define THREADS_PER_BLOCK 256
 
 
@@ -27,6 +28,28 @@ static inline int nextPow2(int n) {
     return n;
 }
 
+__global__ void upsweep(int roundedN, int two_d, int two_dplus1, int* result)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    idx = idx * two_dplus1;
+    if (idx < roundedN)
+    {
+        result[idx+two_dplus1-1] += result[idx+two_d-1];
+    }
+}
+
+
+__global__ void downsweep(int roundedN, int two_d, int two_dplus1, int* result)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    idx = idx * two_dplus1;
+    if (idx < roundedN)
+    {
+    int temp = result[idx+two_d-1];
+    result[idx+two_d-1] = result[idx+two_dplus1-1];
+    result[idx+two_dplus1-1] += temp;
+    }
+}
 // exclusive_scan --
 //
 // Implementation of an exclusive scan on global memory array `input`,
@@ -54,6 +77,30 @@ void exclusive_scan(int* input, int N, int* result)
     // to CUDA kernel functions (that you must write) to implement the
     // scan.
 
+    int roundedN = nextPow2(N);
+
+    for (int two_d = 1; two_d <= roundedN / 2; two_d *= 2)
+    {
+        int two_dplus1 = 2 * two_d;
+        int active_threads = roundedN / two_dplus1;
+        int blocks = (active_threads + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+
+        upsweep<<<blocks, THREADS_PER_BLOCK>>>(roundedN, two_d, two_dplus1, result);
+        cudaDeviceSynchronize();
+    }
+
+    int zero = 0;
+    cudaMemcpy(&result[roundedN-1], &zero, sizeof(int), cudaMemcpyHostToDevice);
+
+    for (int two_d = roundedN/2; two_d >= 1; two_d /= 2)
+    {
+        int two_dplus1 = 2*two_d;
+        int active_threads = roundedN / two_dplus1;
+        int blocks = (active_threads + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+
+        downsweep<<<blocks, THREADS_PER_BLOCK>>>(roundedN, two_d, two_dplus1, result);
+        cudaDeviceSynchronize();
+    }
 
 }
 
@@ -67,7 +114,7 @@ void exclusive_scan(int* input, int N, int* result)
 // above. Students should not modify it.
 double cudaScan(int* inarray, int* end, int* resultarray)
 {
-    int* device_result;
+    int* result;
     int* device_input;
     int N = end - inarray;
 
@@ -82,7 +129,7 @@ double cudaScan(int* inarray, int* end, int* resultarray)
 
     int rounded_length = nextPow2(end - inarray);
 
-    cudaMalloc((void **)&device_result, sizeof(int) * rounded_length);
+    cudaMalloc((void **)&result, sizeof(int) * rounded_length);
     cudaMalloc((void **)&device_input, sizeof(int) * rounded_length);
 
     // For convenience, both the input and output vectors on the
@@ -91,17 +138,17 @@ double cudaScan(int* inarray, int* end, int* resultarray)
     // vector if desired.  If you do this, you will need to keep this
     // in mind when calling exclusive_scan from find_repeats.
     cudaMemcpy(device_input, inarray, (end - inarray) * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(device_result, inarray, (end - inarray) * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(result, inarray, (end - inarray) * sizeof(int), cudaMemcpyHostToDevice);
 
     double startTime = CycleTimer::currentSeconds();
 
-    exclusive_scan(device_input, N, device_result);
+    exclusive_scan(device_input, N, result);
 
     // Wait for completion
     cudaDeviceSynchronize();
     double endTime = CycleTimer::currentSeconds();
 
-    cudaMemcpy(resultarray, device_result, (end - inarray) * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(resultarray, result, (end - inarray) * sizeof(int), cudaMemcpyDeviceToHost);
 
     double overallDuration = endTime - startTime;
     return overallDuration;

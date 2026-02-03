@@ -15,15 +15,15 @@ LOGS	   := logs
 ARCH := $(shell uname -m)
 
 ifeq ($(ARCH), aarch64)
-    CXX = g++
+    CXX = g++-13
 else
-    CXX = g++ -m64
+    CXX = g++-13 -m64
 endif
 
 OBJDIR=objs
 CXXFLAGS=-O3 -Wall
-LDFLAGS=-L/usr/local/cuda/lib64/ -lcudart
-NVCC=nvcc
+LDFLAGS=-L$(CUDA_PATH)/lib64/ -lcudart -lrt -ldl
+NVCC=nvcc -ccbin /usr/bin/g++-13
 NVCCFLAGS=-O3 -m64
 
 
