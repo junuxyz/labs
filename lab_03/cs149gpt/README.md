@@ -4,14 +4,14 @@
 
 **100 points total + 12 Points EC**
 
-## Overview 
+## Overview
 
 In this assignment, you will implement and optimize the key components of a transformer-based deep neural network that synthesizes Shakespeare text. While the DNN you will work with is a fairly small model, the basic components of the model are the same as those featured in large-language models (LLMs) that form the basis of technologies like ChatGPT today. Specifically, you will implement the attention layer of this model in C++, focusing on optimizations that improve arithmetic intensity, reduce memory footprint, and utilize multi-core and potentially SIMD parallelism on the CPU. Your implementation will then be used as part of a complete [NanoGPT](https://github.com/karpathy/nanoGPT) model that you can run to produce novel Shakespeare-like text.
 
 Overall, this assignment will:
 
  * Give you experience with the low-level details of implementing DNN layers. In other words, the "guts" of vendor libraries like NVIDIA's CuDNN or Intel's One API.
-   
+
  * Show the value of key locality-perserving optimizations like loop blocking and loop fusion.
 
 ## Environment Setup
@@ -43,7 +43,7 @@ After this is complete, you'll see some text that begins something like this:
     -------------------------------------------------------------
     CAMILLO:
     The shadows men sweet thy will burn comes.
-    
+
     FLORIZEL:
     But of appear, good from thy heart
     As I be come of repeal of a w
@@ -58,7 +58,7 @@ Some students have experienced issues when their compilation randomly starts han
 
 ## An Attention Module
 
-The NanoGPT module you are executing in this assignment is a sequence-to-sequence model. The input is a sequence of words, such as the phrase *"The course of true love never did run smooth"*.  And the output of the model is a new sequence of words that is likely to follow the input, as determined by a model that have been trained on a large corpus of Shakespeare text. For example, given the prefix above, the output of the model might be *"whispered cs149 students whilst coding on assignments"*.  
+The NanoGPT module you are executing in this assignment is a sequence-to-sequence model. The input is a sequence of words, such as the phrase *"The course of true love never did run smooth"*.  And the output of the model is a new sequence of words that is likely to follow the input, as determined by a model that have been trained on a large corpus of Shakespeare text. For example, given the prefix above, the output of the model might be *"whispered cs149 students whilst coding on assignments"*.
 
 The NanoGPT model uses a popular DNN module called a *transformer*, and a key component of a transformer module is a block called the *attention mechanism*. In this assignment your job is to implement the attention mechanism.  You will begin with a simple sequential implementation of attention, and then over the course of the assignment we'll take you through the process of adding optimizations like loop blocking, loop fusion, and basic parallelization.
 
@@ -76,7 +76,7 @@ The first step of an attention module is to compute all pairs of interactions be
 
 $$S = QK^T.$$
 
-The next computation is a [softmax operation](https://machinelearningmastery.com/softmax-activation-function-with-python/) performed per-row of $S$.  The softmax produces normalized probabilities per row. 
+The next computation is a [softmax operation](https://machinelearningmastery.com/softmax-activation-function-with-python/) performed per-row of $S$.  The softmax produces normalized probabilities per row.
 
 For each row of the matrix, the softmax operation performs the following computation. Note that we give you the math for computing a softmax on a 1D vector $X$.  You'll need to perform this math for each row of the matrix $S$ above.
 
@@ -114,7 +114,7 @@ Run the following command to test your 4D accessor:
 
     python3 gpt149.py 4Daccess
 
-When running the test, if you have implemented your accessors correctly, the expected and result values should be the same, resulting in an output like the one below. 
+When running the test, if you have implemented your accessors correctly, the expected and result values should be the same, resulting in an output like the one below.
 
     Expected: 0.0006
     Result: 0.0006
@@ -132,22 +132,22 @@ Now that you have your accessors, it's time to start working on your custom atte
 
     1) For each Batch:
     2) For each Head:
-        a) Loop through Q and K and multiply Q with K^t, storing the result in QK^t. 
-        QK^t is preallocated for you, and passed as an arg to myNaiveAttention. 
+        a) Loop through Q and K and multiply Q with K^t, storing the result in QK^t.
+        QK^t is preallocated for you, and passed as an arg to myNaiveAttention.
         (You should not have to allocate any pytorch tensors for any part of this assignment)
-        
-        Note that after indexing the batch and head, you will be left with 2D matrices 
-        of shape (N, d) for Q and K. Also note that the dimensions of K are (N, d) and 
+
+        Note that after indexing the batch and head, you will be left with 2D matrices
+        of shape (N, d) for Q and K. Also note that the dimensions of K are (N, d) and
         the dimensions of the K^t that you want are (d, N). Rather than transposing K^t, how
         can you multiply Q and K in such an order that the result is QK^t? Think about how
         you can reorder your `for` loops from traditional matrix multiplication.
-   
-        b) After you have achieved QK^t -- which should have shape (N, N) -- you should loop 
+
+        b) After you have achieved QK^t -- which should have shape (N, N) -- you should loop
         through each row. For each row, you should get the exponential of each row element,
-        which you can get using the C++ inbuilt `exp` function. Now, divide each of these 
-        resulting exponentials by the sum of all exponentials in its row and then store it back into QK^t. 
-   
-        c) Finally, you should matrix multiply QK^t with V and store the result into O. 
+        which you can get using the C++ inbuilt `exp` function. Now, divide each of these
+        resulting exponentials by the sum of all exponentials in its row and then store it back into QK^t.
+
+        c) Finally, you should matrix multiply QK^t with V and store the result into O.
         Notice, much like Q and K, after you index the batch and head V and O will
         be of shape (N, d). Therefore, after you multiply QK^t (N, N) with V (N, d),
         you can simply store the resulting shape (N, d) back into O.
@@ -159,27 +159,27 @@ Run the following test to check your program's correctness:
 
 While running the test, we show results of the pytorch profiler - this information is presented in a table which will show you detailed statistics on all function calls called in the test. The table that is dumped will look like the following:
 
-    -----------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
-                         Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg       CPU Mem  Self CPU Mem    # of Calls  
-    -----------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
-                  aten::empty         0.01%      23.000us         0.01%      23.000us       3.286us       5.00 Mb       5.00 Mb             7  
-                  aten::zeros         0.14%     321.000us         0.18%     408.000us     102.000us       4.50 Mb           4 b             4  
-    STUDENT - NAIVE ATTENTION        99.56%     229.600ms        99.97%     230.538ms     230.538ms       4.50 Mb      -1.00 Mb             1  
-                  aten::clone         0.02%      37.000us         0.10%     231.000us     115.500us       1.00 Mb           0 b             2  
-                aten::flatten         0.02%      48.000us         0.07%     153.000us      30.600us     512.00 Kb           0 b             5  
-             aten::empty_like         0.00%       3.000us         0.00%       8.000us       8.000us     512.00 Kb           0 b             1  
-          aten::empty_strided         0.01%      16.000us         0.01%      16.000us      16.000us     512.00 Kb     512.00 Kb             1  
-              model_inference         0.02%      38.000us        99.98%     230.578ms     230.578ms     512.00 Kb      -4.00 Mb             1  
-                  aten::zero_         0.02%      42.000us         0.15%     354.000us      88.500us           0 b           0 b             4  
-                  aten::fill_         0.14%     312.000us         0.14%     312.000us     156.000us           0 b           0 b             2  
-    -----------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+    -----------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                         Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg       CPU Mem  Self CPU Mem    # of Calls
+    -----------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
+                  aten::empty         0.01%      23.000us         0.01%      23.000us       3.286us       5.00 Mb       5.00 Mb             7
+                  aten::zeros         0.14%     321.000us         0.18%     408.000us     102.000us       4.50 Mb           4 b             4
+    STUDENT - NAIVE ATTENTION        99.56%     229.600ms        99.97%     230.538ms     230.538ms       4.50 Mb      -1.00 Mb             1
+                  aten::clone         0.02%      37.000us         0.10%     231.000us     115.500us       1.00 Mb           0 b             2
+                aten::flatten         0.02%      48.000us         0.07%     153.000us      30.600us     512.00 Kb           0 b             5
+             aten::empty_like         0.00%       3.000us         0.00%       8.000us       8.000us     512.00 Kb           0 b             1
+          aten::empty_strided         0.01%      16.000us         0.01%      16.000us      16.000us     512.00 Kb     512.00 Kb             1
+              model_inference         0.02%      38.000us        99.98%     230.578ms     230.578ms     512.00 Kb      -4.00 Mb             1
+                  aten::zero_         0.02%      42.000us         0.15%     354.000us      88.500us           0 b           0 b             4
+                  aten::fill_         0.14%     312.000us         0.14%     312.000us     156.000us           0 b           0 b             2
+    -----------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------
 
 After the table is dumped, we also display two relevant statistics, cpu time (in milliseconds) and mem usage (in bytes). If you implemented your function correctly you should see those two values output like so:
 
     REFERENCE - NAIVE ATTENTION statistics
     cpu time:  230.724ms
     mem usage:  4718588 bytes
-    
+
     STUDENT - NAIVE ATTENTION statistics
     cpu time:  232.561ms
     mem usage:  4718588 bytes
@@ -187,7 +187,7 @@ After the table is dumped, we also display two relevant statistics, cpu time (in
 If your attention is not producing the correct output, you will see the following message:
 
     YOUR ATTENTION PRODUCED INCORRECT RESULTS
-    
+
 Note that you do not have to exactly match the reference `cpu time,` as long as you still produce a correct result. You should still be relatively close to the cpu time. We will provide you with a buffer of 15ms with respect to the reference cpu time. So, if you are <= 15ms behind the reference solution then that is fine and you will still get full credit. You are of course encouraged to beat the reference cpu time, and faster speeds will not be penalized.
 
 Note that the memory usage value will not change even if you allocate more intermediate variables then we give you. This memory usage is only profiled from the variables passed in as arguments. For each Parts (1-4), we provide you with the minimum amount of variables to produce the correct result. **You can also assume that all the temporary intermediate tensors that we have passed in are initialized to contain zeros.** We do this because we want you to see how the memory usage goes down as operations get fused and there will be writeup questions based on these memory values. Adding any more high memory data structures will most likely only hurt your performance, but you are welcome to try adding additional variables in your `module.cpp` file and you will not be penalized.
@@ -213,7 +213,7 @@ Now that we have our baseline matrix multiply, let's see how we can optimize it.
   <img src="https://github.com/stanford-cs149/cs149gpt/blob/main/assets/current_matmul.png" width=40% height=40%>
 </p>
 
-Notice how poor the cache behavior of this operation is. For each element of C, we load in multiple cache lines from both A and B. However, something to keep in mind is that the size of these matrices are much bigger than our cache size. Therefore, by the time we want to process our next element of C, we will be reloading cache lines that have been evicted. But what if we reused these cache lines? The main reason that our code is inefficient is because we are processing a single element of C at a time, but what if we processed BLOCK elements at a time? In particular, what if we processed a cache line size of elements? 
+Notice how poor the cache behavior of this operation is. For each element of C, we load in multiple cache lines from both A and B. However, something to keep in mind is that the size of these matrices are much bigger than our cache size. Therefore, by the time we want to process our next element of C, we will be reloading cache lines that have been evicted. But what if we reused these cache lines? The main reason that our code is inefficient is because we are processing a single element of C at a time, but what if we processed BLOCK elements at a time? In particular, what if we processed a cache line size of elements?
 
 Your job is to further extend your matrix multiply so that it employs blocking as discussed in [lecture](https://gfxcourses.stanford.edu/cs149/fall23/lecture/perfopt2/slide_43). You will decompose the large matrices into smaller cache-sized submatrices. Your multiply will then process the smaller submatrices before evicting them from the cache. The behavior should look like the following:
 
@@ -268,19 +268,19 @@ Note that you will not be autograded on inference, and this is purely for fun. P
   * For a matrix multiply of $Q$ (Nxd) and $K^{T}$ (dxN), what is the ratio of DRAM accesses in Part 2 versus DRAM acceses in Part 1? (assume 4 byte float primitives, 64 byte cache lines, as well as N and d are very large).
 
 ## Part 3: Fused Attention (25 Points)
-By now we've seen that multiplying $Q * K^{T}$ results in a massive NxN matrix. Doing the matrix multiplies and softmax in seperate functions requies that we write each row of our NxN matrix, and then do another pass over this NxN matrix in the subsequent softmax, and then do a third pass over the softmax'd matrix when multipling it by V. Not only is this bad for cache performance, but it is very bad for our program's memory footprint. 
+By now we've seen that multiplying $Q * K^{T}$ results in a massive NxN matrix. Doing the matrix multiplies and softmax in seperate functions requies that we write each row of our NxN matrix, and then do another pass over this NxN matrix in the subsequent softmax, and then do a third pass over the softmax'd matrix when multipling it by V. Not only is this bad for cache performance, but it is very bad for our program's memory footprint.
 
 Fortunately, we can resolve both issues by "fusing" the calculation, such that we only require one Nx1 temporary vector instead of an NxN temporary matrix.
 
 You can do this by observing the following fact. Once we've calculated a single row of the $Q * K^t$ NxN matrix, we are actually ready to softmax that entire row, and we don't have to calculate the rest of the NxN matrix to do so.
 
-Once that row is softmax'd, we can then immediately multiply the softmax'd row by V to fully compute the first row of our attention output (which is of reasonable size: Nxd). In other words, we can calculate just one row of $Q * K^{t}$, softmax it, then multiply that softmax's row by V. Doing this does not require creating the NxN matrix...it requires creating only one Nx1 size intermediate vector to hold the first row of $Q*K^{t}$ and then its softmax. We can then re-use this same Nx1 array to calculate the 2nd row of attention, and then the third, etc. This means that we never materialize the NxN matrix, which is great because that matrix is never used again later in the network anyways. 
+Once that row is softmax'd, we can then immediately multiply the softmax'd row by V to fully compute the first row of our attention output (which is of reasonable size: Nxd). In other words, we can calculate just one row of $Q * K^{t}$, softmax it, then multiply that softmax's row by V. Doing this does not require creating the NxN matrix...it requires creating only one Nx1 size intermediate vector to hold the first row of $Q*K^{t}$ and then its softmax. We can then re-use this same Nx1 array to calculate the 2nd row of attention, and then the third, etc. This means that we never materialize the NxN matrix, which is great because that matrix is never used again later in the network anyways.
 
 ### Parallelizing with OpenMP
 As you may notice, now that we have fused our matrix multiplications and softmax, we made a significant portion of the computation embarrassingly parallel. For example, we are able to independently compute batches, heads, and rows of our output matrix. This is a perfect opportunity for multi-threading! This time we will be using OpenMP, so you don't have to implement your own threadpools. The OpenMP syntax is relatively simple. If you want to parallelize an section of code, it would look like the following:
 
     #pragma omp parallel for collapse()
-    
+
     -- code is here --
 
 You will find `#pragma omp parallel for collapse()` useful if you find loops directly nested on top of one another and want to parallelize them. For example, for a triple perfectly nested loop:
@@ -290,7 +290,7 @@ You will find `#pragma omp parallel for collapse()` useful if you find loops dir
     for ()
 
         for()
-    
+
             for()
 
 Note: You'd usually want to be careful when writing to a single Nx1 temporary row when using OpenMP, as this is a race condition. To work around this, we give you a skeleton of the first three loops (you will need more loops) in which each OpenMP thread gets assigned its own copy of the Nx1 temporary array, in a way that avoids race conditions. This local copy of the array is a slice/subset of the temporary memory we allocate for you, and pass into the function (`myFusedAttention`) as an argument. Keep in mind that any variables declared inside the loop(s) you are trying to parallelize will be private to each thread.
@@ -402,7 +402,7 @@ Now, you can see the DNN use your attention layer to generate text, optionally c
 Note that you will not be autograded on inference, and this is purely for fun. Please also note that the models `shakes1024` and `shakes2048` will not work with the softmax we describe in this writeup due to overflow errors. If you wish to have them work, you must implement the "safe" softmax described in class. This is completely optional as we will always make sure to give you nice values when grading.
 
 ### What to submit
-* Implement `myFlashAttention` in `module.cpp`. 
+* Implement `myFlashAttention` in `module.cpp`.
 
 * Then, answer the following question in your writeup:
   * How does the memory usage of Part 4 compare to that of the previous parts? Why is this the case?
@@ -413,8 +413,8 @@ Note that you will not be autograded on inference, and this is purely for fun. P
 ### Vectorize with ISPC Intrinsics
 You may notice that there are many looped-based nondivergent floating point operations. This is a great place to use vector intrinsics! We have provided ISPC support for you to write you own vectorized functions for things such as matrix multiplication and row sum. The repo contains a file titled `module.ispc`. Feel free to write your own ISPC functions in here, and compile them with the command:
 
-     ispc -O3 --target=avx2-i32x8 --arch=x86-64 --pic module.ispc -h module_ispc.h -o module_ispc.o 
-     
+     ispc -O3 --target=avx2-i32x8 --arch=x86-64 --pic module.ispc -h module_ispc.h -o module_ispc.o
+
 To enable them in your `module.cpp` file, all you need to simply uncomment the following two lines at the top of the file:
 
     #include "module_ispc.h"
@@ -445,5 +445,5 @@ Please submit your writeup questions in a file `writeup.pdf`. REMEMBER to map th
 * Please submit the following files to Assignment 4 (Code):
   * module.cpp
   * module.ispc (if you attempted the extra credit)
-    
+
 * Please submit your writeup in a file called `writeup.pdf` to Assignment 4 (Write-Up).
