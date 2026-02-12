@@ -28,9 +28,9 @@ static inline int nextPow2(int n) {
     return n;
 }
 
-__global__ void upsweep(int roundedN, int two_d, int two_dplus1, int* result)
+__global__ void upsweep(int roundedN, size_t two_d, size_t two_dplus1, int* result)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t idx = size_t(blockIdx.x * blockDim.x + threadIdx.x);
     idx = idx * two_dplus1;
     if (idx < roundedN)
     {
@@ -39,15 +39,15 @@ __global__ void upsweep(int roundedN, int two_d, int two_dplus1, int* result)
 }
 
 
-__global__ void downsweep(int roundedN, int two_d, int two_dplus1, int* result)
+__global__ void downsweep(int roundedN, size_t two_d, size_t two_dplus1, int* result)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t idx = size_t(blockIdx.x * blockDim.x + threadIdx.x);
     idx = idx * two_dplus1;
     if (idx < roundedN)
     {
-    int temp = result[idx+two_d-1];
-    result[idx+two_d-1] = result[idx+two_dplus1-1];
-    result[idx+two_dplus1-1] += temp;
+        int temp = result[idx+two_d-1];
+        result[idx+two_d-1] = result[idx+two_dplus1-1];
+        result[idx+two_dplus1-1] += temp;
     }
 }
 // exclusive_scan --
@@ -77,11 +77,13 @@ void exclusive_scan(int* input, int N, int* result)
     // to CUDA kernel functions (that you must write) to implement the
     // scan.
 
-    int roundedN = nextPow2(N);
+    size_t roundedN = nextPow2(N);
 
-    for (int two_d = 1; two_d <= roundedN / 2; two_d *= 2)
+    cudaMemcpy(result, input, sizeof(int) * roundedN, cudaMemcpyDeviceToDevice);
+
+    for (size_t two_d = 1; two_d <= roundedN / 2; two_d *= 2)
     {
-        int two_dplus1 = 2 * two_d;
+        size_t two_dplus1 = 2 * two_d;
         int active_threads = roundedN / two_dplus1;
         int blocks = (active_threads + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
@@ -92,9 +94,9 @@ void exclusive_scan(int* input, int N, int* result)
     int zero = 0;
     cudaMemcpy(&result[roundedN-1], &zero, sizeof(int), cudaMemcpyHostToDevice);
 
-    for (int two_d = roundedN/2; two_d >= 1; two_d /= 2)
+    for (size_t two_d = roundedN/2; two_d >= 1; two_d /= 2)
     {
-        int two_dplus1 = 2*two_d;
+        size_t two_dplus1 = 2*two_d;
         int active_threads = roundedN / two_dplus1;
         int blocks = (active_threads + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
@@ -188,6 +190,35 @@ double cudaScanThrust(int* inarray, int* end, int* resultarray) {
 }
 
 
+__global__ void create_flags(int* device_input, int length, int* device_flags)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < length - 1)
+    {
+        device_flags[idx] = 0;
+        if (device_input[idx] == device_input[idx + 1])
+            device_flags[idx] = 1;
+    }
+}
+
+
+__global__ void scatter_indices_kernel(
+                                        int* device_flags,
+                                        int length,
+                                        int* device_scan_result,
+                                        int* device_output
+                                    )
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < length - 1)
+    {
+        if (device_flags[idx] == 1)
+            device_output[device_scan_result[idx]] = idx; 
+    }
+}
+
 // find_repeats --
 //
 // Given an array of integers `device_input`, returns an array of all
@@ -208,7 +239,42 @@ int find_repeats(int* device_input, int length, int* device_output) {
     // must ensure that the results of find_repeats are correct given
     // the actual array length.
 
-    return 0;
+    // device mem space for intermediate results
+    int* device_flags;
+    int* device_scan_result;
+    size_t roundedLength = nextPow2(length);
+    
+    // memory allocation to device
+    cudaMalloc(&device_flags, sizeof(int) * roundedLength);
+    cudaMalloc(&device_scan_result, sizeof(int) * roundedLength);
+
+    // initialize with zero
+    cudaMemset(device_flags, 0, sizeof(int) * roundedLength);
+
+
+int blocks = (int)(( (size_t)length + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK);
+    create_flags<<<blocks , THREADS_PER_BLOCK>>>(device_input, length, device_flags);
+    cudaDeviceSynchronize();
+    
+    // [0, 0, 1, ...] length of roundedLength
+    exclusive_scan(device_flags, roundedLength, device_scan_result);
+
+    blocks = (int(((int)roundedLength + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK));
+    scatter_indices_kernel<<<blocks, THREADS_PER_BLOCK>>>(device_flags, length,
+                                                         device_scan_result, device_output);
+    cudaDeviceSynchronize();
+
+    int last_scan_val;
+    int last_flag_val;
+
+    cudaMemcpy(&last_flag_val, &device_flags[length - 2], sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&last_scan_val, &device_scan_result[length - 2], sizeof(int), cudaMemcpyDeviceToHost);
+    
+    cudaFree(device_flags);
+    cudaFree(device_scan_result);
+
+    return last_scan_val + last_flag_val;
+
 }
 
 
