@@ -633,13 +633,80 @@ CudaRenderer::advanceAnimation() {
     cudaDeviceSynchronize();
 }
 
+
+void __global__ renderBoundingBox(
+    int bboxWidth, int bboxHeight, float invWidth, float invHeight,
+    int circleIndex, float px, float py, float pz, int bboxMinX, int bboxMinY
+) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x >= bboxWidth || y >= bboxHeight)
+        return;
+
+    int imageX = bboxMinX + x;
+    int imageY = bboxMinY + y;
+
+    float4* imgPtr = (float4*)(&cuConstRendererParams.imageData[4 * (imageY * cuConstRendererParams.imageWidth + imageX)]);
+    float2 pixelCenterNorm = make_float2(invWidth * (static_cast<float>(imageX) + 0.5f),
+                                         invHeight * (static_cast<float>(imageY) + 0.5f));
+    float3 p = make_float3(px, py, pz);
+    shadePixel(circleIndex, pixelCenterNorm, p, imgPtr);
+    }
+
+
 void
 CudaRenderer::render() {
+    // ive borrowed most of the code from refRenderer.cpp
+    // render all circles
+    for (int circleIndex=0; circleIndex<numCircles; circleIndex++) {
 
-    // 256 threads per block is a healthy number
-    dim3 blockDim(256, 1);
-    dim3 gridDim((numCircles + blockDim.x - 1) / blockDim.x);
+        int index3 = 3 * circleIndex;
 
-    kernelRenderCircles<<<gridDim, blockDim>>>();
-    cudaDeviceSynchronize();
+        float px = position[index3];
+        float py = position[index3+1];
+        float pz = position[index3+2];
+        float rad = radius[circleIndex];
+
+        // compute the bounding box of the circle.  This bounding box
+        // is in normalized coordinates
+        float minX = px - rad;
+        float maxX = px + rad;
+        float minY = py - rad;
+        float maxY = py + rad;
+
+        // convert normalized coordinate bounds to integer screen
+        // pixel bounds.  Clamp to the edges of the screen.
+        int screenMinX = CLAMP(static_cast<int>(minX * image->width), 0, image->width);
+        int screenMaxX = CLAMP(static_cast<int>(maxX * image->width)+1, 0, image->width);
+        int screenMinY = CLAMP(static_cast<int>(minY * image->height), 0, image->height);
+        int screenMaxY = CLAMP(static_cast<int>(maxY * image->height)+1, 0, image->height);
+
+        float invWidth = 1.f / image->width;
+        float invHeight = 1.f / image->height;
+
+        // iterate over each bounding box
+        // for each pixel in the bounding box, determine the circle's
+        // contribution to the pixel.  The contribution is computed in
+        // the function shadePixel.  Since the circle does not fill
+        // the bounding box entirely, not every pixel in the box will
+        // receive contribution.
+        // 256 threads per block is a healthy number
+        // 2D(16 x 16) blocks are a good way to cover the 2D image space
+        dim3 blockDim(16, 16);
+
+        int bboxWidth = screenMaxX - screenMinX;
+        int bboxHeight = screenMaxY - screenMinY;
+
+        // skip kernel launch if bounding box is empty
+        if (bboxWidth <= 0 || bboxHeight <= 0)
+            continue;
+
+        dim3 gridDim((bboxWidth + blockDim.x - 1) / blockDim.x, (bboxHeight + blockDim.y - 1) / blockDim.y);
+
+        renderBoundingBox<<<gridDim, blockDim>>>(
+            bboxWidth, bboxHeight, invWidth, invHeight, circleIndex, px, py, pz, screenMinX, screenMinY
+        );
+        cudaDeviceSynchronize();
+    }
 }
